@@ -40,23 +40,36 @@ function safeParse<T>(schema: z.ZodSchema<T>, data: unknown): T | null {
   return result.data;
 }
 
+function readStorageBoolean(key: string): boolean {
+  try {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem(key) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function writeStorageBoolean(key: string, value: boolean) {
+  try {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem(key, value ? 'true' : 'false');
+  } catch {
+    // Ignore storage write errors (blocked storage / privacy mode)
+  }
+}
+
 export function useChat() {
-  const [state, setState] = useState<ChatState>(() => {
-    const savedNotif = typeof window !== 'undefined'
-      ? localStorage.getItem('chat_notif_pref') === 'true'
-      : false;
-    return {
-      username: '',
-      roomCode: '',
-      messages: [],
-      users: [],
-      isJoined: false,
-      notificationsEnabled: savedNotif,
-      typingUsers: [],
-      frozen: false,
-      frozenBy: null,
-    };
-  });
+  const [state, setState] = useState<ChatState>(() => ({
+    username: '',
+    roomCode: '',
+    messages: [],
+    users: [],
+    isJoined: false,
+    notificationsEnabled: readStorageBoolean('chat_notif_pref'),
+    typingUsers: [],
+    frozen: false,
+    frozenBy: null,
+  }));
 
   const channelRef = useRef<RealtimeChannel | null>(null);
   const notificationsRef = useRef(state.notificationsEnabled);
@@ -386,7 +399,7 @@ export function useChat() {
         try {
           const perm = await Notification.requestPermission();
           if (perm === 'granted') {
-            localStorage.setItem('chat_notif_pref', 'true');
+            writeStorageBoolean('chat_notif_pref', true);
             setState(prev => ({ ...prev, notificationsEnabled: true }));
             return;
           }
@@ -395,10 +408,10 @@ export function useChat() {
         }
       }
       // Enable even if Notification API unavailable — visual toggle still works
-      localStorage.setItem('chat_notif_pref', 'true');
+      writeStorageBoolean('chat_notif_pref', true);
       setState(prev => ({ ...prev, notificationsEnabled: true }));
     } else {
-      localStorage.setItem('chat_notif_pref', 'false');
+      writeStorageBoolean('chat_notif_pref', false);
       setState(prev => ({ ...prev, notificationsEnabled: false }));
     }
   }, [state.notificationsEnabled]);

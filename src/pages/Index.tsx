@@ -7,7 +7,7 @@ import { ChatArea } from '@/components/ChatArea';
 import { AdminPanel } from '@/components/AdminPanel';
 import { AdminAuthOverlay } from '@/components/AdminAuthOverlay';
 
-const Index = () => {
+const Index = () => { // v0id chat
   const {
     state, joinRoom, leaveRoom, sendMessage, sendTyping,
     toggleNotifications, nukeRoom, freezeChat, sendAnnouncement, editMessage, unsendMessage, sendImage, sendGif,

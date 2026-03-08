@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Bell, BellOff, LogOut, Plus, Check, CheckCheck, ChevronDown } from 'lucide-react';
+import { Send, Bell, BellOff, LogOut, Plus, Check, CheckCheck, ChevronDown, FileText } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GifPicker } from '@/components/GifPicker';
 import { FullscreenImageViewer } from '@/components/FullscreenImageViewer';
+import { FileInspectorModal } from '@/components/FileInspectorModal';
 import { ChatMessage } from '@/types/chat';
 import { Progress } from '@/components/ui/progress';
 import {
@@ -30,11 +31,17 @@ interface ChatAreaProps {
   onSendGif: (url: string) => void;
 }
 
-const ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
 
 function isImageExpired(expiry?: number) {
   if (!expiry) return false;
   return Date.now() > expiry;
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
 function StatusIcon({ status }: { status?: string }) {
@@ -74,8 +81,11 @@ export function ChatArea({
   const [uploadProgress, setUploadProgress] = useState(0);
   const [dragging, setDragging] = useState(false);
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
+  const [inspectedFile, setInspectedFile] = useState<{ fileName: string; fileSize: number; fileUrl: string } | null>(null);
   const [isScrolledUp, setIsScrolledUp] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [headerRevealed, setHeaderRevealed] = useState(false);
+  const [bellJiggle, setBellJiggle] = useState(false);
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
@@ -159,7 +169,7 @@ export function ChatArea({
   };
 
   const handleFileUpload = useCallback(async (file: File) => {
-    if (!ACCEPTED_TYPES.includes(file.type)) return;
+    if (file.size > MAX_FILE_SIZE) return;
     setUploading(true);
     setUploadProgress(0);
     await onSendImage(file, (p) => setUploadProgress(p));
@@ -195,9 +205,16 @@ export function ChatArea({
     setFullscreenImage(imageUrl);
   };
 
+  const handleNotificationToggle = () => {
+    setBellJiggle(true);
+    setTimeout(() => setBellJiggle(false), 500);
+    onToggleNotifications();
+  };
+
   const formatTime = (ts: number) =>
     new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
+  const maskedRoomCode = '*'.repeat(roomCode.length);
   const isInputDisabled = frozen && frozenBy !== currentUser;
 
   return (
@@ -210,20 +227,26 @@ export function ChatArea({
     >
       {dragging && (
         <div className="absolute inset-0 z-40 bg-background/90 flex items-center justify-center pointer-events-none">
-          <span className="text-foreground text-sm font-medium">Drop image to share</span>
+          <span className="text-foreground text-sm font-medium">Drop file to share</span>
         </div>
       )}
 
       <header className="h-12 flex items-center justify-between px-4 shrink-0 bg-card">
-        <span className="text-sm font-medium text-foreground">{roomCode}</span>
+        <span
+          className="text-sm font-medium text-foreground font-mono cursor-default select-none transition-all duration-200"
+          onMouseEnter={() => setHeaderRevealed(true)}
+          onMouseLeave={() => setHeaderRevealed(false)}
+        >
+          {headerRevealed ? roomCode : maskedRoomCode}
+        </span>
         <div className="flex items-center gap-1">
           <button
-            onClick={onToggleNotifications}
-            className={`p-2 rounded-md transition-colors ${notificationsEnabled ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+            onClick={handleNotificationToggle}
+            className={`p-2 rounded-md transition-colors btn-press ${notificationsEnabled ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'} ${bellJiggle ? 'bell-jiggle' : ''}`}
           >
             {notificationsEnabled ? <Bell className="w-4 h-4" /> : <BellOff className="w-4 h-4" />}
           </button>
-          <button onClick={onLeave} className="p-2 rounded-md text-muted-foreground hover:text-foreground transition-colors md:hidden">
+          <button onClick={onLeave} className="p-2 rounded-md text-muted-foreground hover:text-foreground transition-colors md:hidden btn-press">
             <LogOut className="w-4 h-4" />
           </button>
         </div>
@@ -236,39 +259,58 @@ export function ChatArea({
       )}
 
       {uploading && (
-        <div className="px-4 py-2">
-          <Progress value={uploadProgress} className="h-1" />
+        <div className="px-0">
+          <Progress value={uploadProgress} className="h-[1px] rounded-none" />
         </div>
       )}
 
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto scrollbar-thin p-4 space-y-2">
-        {messages.map((msg) => {
+        {messages.map((msg, index) => {
           if (msg.type === 'system') {
             return (
-              <div key={msg.id} className="flex justify-center py-1">
+              <motion.div
+                key={msg.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.25 }}
+                className="flex justify-center py-1"
+              >
                 <span className="text-[11px] text-muted-foreground font-mono">{msg.text}</span>
-              </div>
+              </motion.div>
             );
           }
 
           if (msg.type === 'announcement') {
             return (
-              <div key={msg.id} className="flex justify-center py-2">
+              <motion.div
+                key={msg.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.25 }}
+                className="flex justify-center py-2"
+              >
                 <span className="text-xs font-semibold text-foreground">{msg.text}</span>
-              </div>
+              </motion.div>
             );
           }
 
           if (msg.deleted) {
             return (
-              <div key={msg.id} className={`flex ${msg.username === currentUser ? 'justify-end' : 'justify-start'}`}>
+              <motion.div
+                key={msg.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.25 }}
+                className={`flex ${msg.username === currentUser ? 'justify-end' : 'justify-start'}`}
+              >
                 <span className="text-[11px] italic text-muted-foreground px-3 py-2">Message deleted</span>
-              </div>
+              </motion.div>
             );
           }
 
           const isOwn = msg.username === currentUser;
           const imageExpired = isImageExpired(msg.imageExpiry);
+          const isFile = msg.fileUrl && msg.fileName;
 
           const bubble = (
             <div className="max-w-[75%] space-y-0.5">
@@ -293,6 +335,7 @@ export function ChatArea({
                       : 'bg-message-other text-message-other-foreground rounded-bl-sm'
                   }`}
                 >
+                  {/* Image display */}
                   {msg.imageUrl && !imageExpired && (
                     <div className="relative">
                       <img
@@ -310,6 +353,27 @@ export function ChatArea({
                   {msg.imageUrl && imageExpired && (
                     <span className="text-[11px] italic text-muted-foreground">Image expired</span>
                   )}
+
+                  {/* File attachment display */}
+                  {isFile && (
+                    <button
+                      onClick={() => setInspectedFile({ fileName: msg.fileName!, fileSize: msg.fileSize || 0, fileUrl: msg.fileUrl! })}
+                      className={`flex items-center gap-2 py-1.5 px-2 rounded-lg border transition-colors w-full text-left btn-press ${
+                        isOwn
+                          ? 'border-message-own-foreground/20 hover:bg-message-own-foreground/10'
+                          : 'border-foreground/20 hover:bg-foreground/10'
+                      }`}
+                    >
+                      <FileText className="w-5 h-5 shrink-0 opacity-60" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-mono truncate">{msg.fileName}</p>
+                        {msg.fileSize != null && (
+                          <p className="text-[10px] opacity-60 font-mono">{formatFileSize(msg.fileSize)}</p>
+                        )}
+                      </div>
+                    </button>
+                  )}
+
                   {msg.text}
                 </div>
               )}
@@ -323,11 +387,22 @@ export function ChatArea({
             </div>
           );
 
+          const wrappedBubble = (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.25 }}
+              className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}
+            >
+              {bubble}
+            </motion.div>
+          );
+
           if (isOwn) {
             return (
               <ContextMenu key={msg.id}>
                 <ContextMenuTrigger asChild>
-                  <div className="flex justify-end">{bubble}</div>
+                  {wrappedBubble}
                 </ContextMenuTrigger>
                 <ContextMenuContent>
                   <ContextMenuItem onSelect={() => { setEditingId(msg.id); setEditText(msg.text); }}>
@@ -342,7 +417,7 @@ export function ChatArea({
           }
 
           return (
-            <div key={msg.id} className="flex justify-start">{bubble}</div>
+            <div key={msg.id}>{wrappedBubble}</div>
           );
         })}
         <div ref={endRef} />
@@ -356,12 +431,12 @@ export function ChatArea({
             exit={{ opacity: 0, scale: 0.8, y: 10 }}
             transition={{ duration: 0.2 }}
             onClick={() => scrollToBottom(true)}
-            className="absolute bottom-20 left-1/2 -translate-x-1/2 z-30 w-12 h-12 rounded-full bg-black border border-white flex items-center justify-center text-white hover:bg-white hover:text-black transition-colors shadow-lg"
+            className="absolute bottom-20 left-1/2 -translate-x-1/2 z-30 w-12 h-12 rounded-full bg-background border border-foreground flex items-center justify-center text-foreground hover:bg-foreground hover:text-background transition-colors shadow-lg btn-press"
             aria-label="Scroll to bottom"
           >
             <ChevronDown className="w-5 h-5" />
             {unreadCount > 0 && (
-              <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-white text-black text-[10px] font-mono font-bold flex items-center justify-center border border-black">
+              <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-foreground text-background text-[10px] font-mono font-bold flex items-center justify-center border border-background">
                 {unreadCount > 99 ? '99+' : unreadCount}
               </span>
             )}
@@ -385,7 +460,6 @@ export function ChatArea({
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/png,image/jpeg,image/webp,image/gif"
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];
@@ -400,7 +474,7 @@ export function ChatArea({
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={isInputDisabled}
-            className="p-2.5 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
+            className="p-2.5 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-20 disabled:cursor-not-allowed btn-press"
           >
             <Plus className="w-4 h-4" />
           </button>
@@ -417,7 +491,7 @@ export function ChatArea({
           <button
             type="submit"
             disabled={!input.trim() || isInputDisabled}
-            className="bg-primary text-primary-foreground p-2.5 rounded-lg hover:opacity-90 transition-opacity disabled:opacity-20 disabled:cursor-not-allowed"
+            className="bg-primary text-primary-foreground p-2.5 rounded-lg hover:opacity-90 transition-opacity disabled:opacity-20 disabled:cursor-not-allowed btn-press"
           >
             <Send className="w-4 h-4" />
           </button>
@@ -428,6 +502,15 @@ export function ChatArea({
         <FullscreenImageViewer
           imageUrl={fullscreenImage}
           onClose={() => setFullscreenImage(null)}
+        />
+      )}
+
+      {inspectedFile && (
+        <FileInspectorModal
+          fileName={inspectedFile.fileName}
+          fileSize={inspectedFile.fileSize}
+          fileUrl={inspectedFile.fileUrl}
+          onClose={() => setInspectedFile(null)}
         />
       )}
     </div>

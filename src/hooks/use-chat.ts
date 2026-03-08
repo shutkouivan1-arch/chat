@@ -18,6 +18,9 @@ const ChatMessageSchema = z.object({
   deleted: z.boolean().optional(),
   imageUrl: z.string().url().max(2000).optional(),
   imageExpiry: z.number().optional(),
+  fileName: z.string().max(500).optional(),
+  fileSize: z.number().optional(),
+  fileUrl: z.string().url().max(2000).optional(),
 });
 
 const TypingSchema = z.object({ username: z.string().max(20) });
@@ -453,15 +456,16 @@ export function useChat() {
   }, []);
 
   const sendImage = useCallback(async (file: File, onProgress?: (p: number) => void) => {
-    const ext = file.name.split('.').pop() || 'png';
-    const fileName = `${generateId()}_${Date.now()}.${ext}`;
+    const ext = file.name.split('.').pop() || 'bin';
+    const storageName = `${generateId()}_${Date.now()}.${ext}`;
     const expiry = Date.now() + TEN_MINUTES;
+    const isImage = file.type.startsWith('image/');
 
     onProgress?.(10);
 
     const { error } = await supabase.storage
       .from('chat-images')
-      .upload(fileName, file, { contentType: file.type });
+      .upload(storageName, file, { contentType: file.type });
 
     if (error) {
       console.error('Upload failed:', error.message);
@@ -472,7 +476,7 @@ export function useChat() {
 
     const { data: urlData } = supabase.storage
       .from('chat-images')
-      .getPublicUrl(fileName);
+      .getPublicUrl(storageName);
 
     onProgress?.(90);
 
@@ -483,8 +487,10 @@ export function useChat() {
       timestamp: Date.now(),
       type: 'message',
       status: 'sent',
-      imageUrl: urlData.publicUrl,
-      imageExpiry: expiry,
+      ...(isImage
+        ? { imageUrl: urlData.publicUrl, imageExpiry: expiry }
+        : { fileUrl: urlData.publicUrl, fileName: file.name, fileSize: file.size }
+      ),
     };
 
     setState(prev => ({ ...prev, messages: [...prev.messages, msg] }));

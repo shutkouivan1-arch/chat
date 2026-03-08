@@ -383,12 +383,20 @@ export function useChat() {
   const toggleNotifications = useCallback(async () => {
     if (!state.notificationsEnabled) {
       if ('Notification' in window) {
-        const perm = await Notification.requestPermission();
-        if (perm === 'granted') {
-          localStorage.setItem('chat_notif_pref', 'true');
-          setState(prev => ({ ...prev, notificationsEnabled: true }));
+        try {
+          const perm = await Notification.requestPermission();
+          if (perm === 'granted') {
+            localStorage.setItem('chat_notif_pref', 'true');
+            setState(prev => ({ ...prev, notificationsEnabled: true }));
+            return;
+          }
+        } catch {
+          // Permission API not available (e.g. iframe), toggle anyway
         }
       }
+      // Enable even if Notification API unavailable — visual toggle still works
+      localStorage.setItem('chat_notif_pref', 'true');
+      setState(prev => ({ ...prev, notificationsEnabled: true }));
     } else {
       localStorage.setItem('chat_notif_pref', 'false');
       setState(prev => ({ ...prev, notificationsEnabled: false }));

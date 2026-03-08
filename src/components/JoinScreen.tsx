@@ -52,23 +52,24 @@ export function JoinScreen({ onJoin }: JoinScreenProps) {
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-xs font-medium text-muted-foreground font-mono">Room Name</label>
+          <label className="text-xs font-medium text-muted-foreground font-mono">Room Code</label>
           <input
-            type="text"
+            type="password"
             value={roomName}
             onChange={(e) => setRoomName(e.target.value)}
-            placeholder="any name creates a room"
-            className="w-full bg-input rounded-md py-2.5 px-3 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-ring transition-colors font-mono"
+            placeholder="••••••••"
+            className="w-full bg-input rounded-md py-2.5 px-3 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-ring transition-colors font-mono tracking-widest"
             maxLength={30}
             required
             disabled={joining}
+            autoComplete="off"
           />
         </div>
 
         <button
           type="submit"
           disabled={!username.trim() || !roomName.trim() || joining}
-          className="w-full bg-primary text-primary-foreground font-medium py-2.5 rounded-md flex items-center justify-center gap-2 hover:opacity-90 transition-opacity disabled:opacity-20 disabled:cursor-not-allowed font-mono"
+          className="w-full bg-primary text-primary-foreground font-medium py-2.5 rounded-md flex items-center justify-center gap-2 hover:opacity-90 transition-opacity disabled:opacity-20 disabled:cursor-not-allowed font-mono btn-press"
         >
           {joining ? (
             <>

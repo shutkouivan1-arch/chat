@@ -18,6 +18,9 @@ const ChatMessageSchema = z.object({
   deleted: z.boolean().optional(),
   imageUrl: z.string().url().max(2000).optional(),
   imageExpiry: z.number().optional(),
+  fileName: z.string().max(500).optional(),
+  fileSize: z.number().optional(),
+  fileUrl: z.string().url().max(2000).optional(),
 });
 
 const TypingSchema = z.object({ username: z.string().max(20) });
